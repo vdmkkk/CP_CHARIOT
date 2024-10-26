@@ -6,8 +6,7 @@
       show-if-above
       :width="350"
       :breakpoint="700"
-      overlay
-      class="bg-primary text-white"
+      class="text-white"
     >
       <q-virtual-scroll
         v-slot="{ item: chat }"
@@ -21,13 +20,8 @@
       </q-virtual-scroll>
     </q-drawer>
     <q-page-container>
-      <q-page ref="pageContainerRef" class="row items-center justify-evenly">
-        <div
-          :class="
-            (showChats ? 'drawer-btn-container-open' : 'drawer-btn-container') +
-            ' column justify-center q-mr-lg'
-          "
-        >
+      <q-page class="row items-center justify-evenly">
+        <div class="drawer-btn-container column justify-center q-mr-lg">
           <q-btn
             class="drawer-btn"
             flat
@@ -55,9 +49,15 @@
           outlined
           rounded
           autogrow
+          ref="inputRef"
+          @keydown.tab.prevent="acceptSuggestion"
+          @update:model-value="onInput"
         >
-          <template v-slot:append class="row">
-            <q-btn round flat class="btn" icon="attach_file" />
+          <template v-slot:append>
+            <span v-if="suggestedText" class="suggestion-text">
+              {{ suggestedText }}
+            </span>
+            <!-- <q-btn round flat class="btn" icon="attach_file" /> -->
             <q-btn round flat class="btn" icon="send" />
           </template>
         </q-input>
@@ -67,19 +67,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, useTemplateRef, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import messageData from '../assets/messages.json';
 import chatsData from '../assets/chats.json';
+import { useRoute } from 'vue-router';
+
+import { debounce } from 'lodash'; // Use lodash-es or any debounce utility
+import { useQuasar } from 'quasar';
+
+const route = useRoute();
+
 const showChats = ref(true);
 const userInput = ref('');
-
-const pageContainerRef = useTemplateRef('pageContainerRef');
-const pageHeight = ref(0);
-
-// onMounted(() => {
-//   console.log(pageContainerRef.value.$el.offsetHeight);
-//   pageHeight.value = `${pageContainerRef.value.offsetHeight}px`;
-// });
 
 const messages = computed(() => {
   return messageData;
@@ -88,6 +87,99 @@ const messages = computed(() => {
 const chats = computed(() => {
   return chatsData;
 });
+
+const mode = ref('');
+
+const inputRef = ref(null);
+
+// Reactive data properties
+const debounceduserInput = ref(''); // Debounced input value
+const suggestion = ref(''); // Full suggested text
+const abortController = ref(null); // For cancelling requests
+
+// Debounce the input to prevent multiple rapid API calls
+const debouncedUpdateuserInput = debounce(() => {
+  debounceduserInput.value = userInput.value;
+  console.log(debounceduserInput.value);
+}, 500); // Adjust the debounce delay as needed (e.g., 500ms)
+
+function onInput() {
+  console.log('allo');
+  debouncedUpdateuserInput();
+}
+
+// Watch the debounced input value to fetch suggestions
+watch(debounceduserInput, async (newValue) => {
+  if (abortController.value) {
+    // Cancel previous request
+    abortController.value.abort();
+  }
+
+  // Create a new AbortController for the current request
+  abortController.value = new AbortController();
+  const signal = abortController.value.signal;
+
+  try {
+    // Fetch suggestion from the backend
+    const result = await getSuggestion(newValue, signal);
+    suggestion.value = result;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      // Request was aborted, do nothing
+      console.log('Previous request was cancelled.');
+    } else {
+      // Handle other errors
+      console.error('Error fetching suggestion:', error);
+    }
+    suggestion.value = '';
+  }
+});
+
+// Function to fetch suggestion from the backend
+async function getSuggestion(inputText, signal) {
+  // Replace this with your actual API endpoint and request
+  // Example using fetch with AbortController support
+  // const response = await fetch('/api/suggestion', {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify({ text: inputText }),
+  //   signal: signal, // Pass the signal to support cancellation
+  // });
+
+  // if (!response.ok) {
+  //   throw new Error('Network response was not ok');
+  // }
+
+  // const data = await response.json();
+  // return data.suggestion; // Adjust based on your API response structure
+  return 'aboba';
+}
+
+// Compute the suggested text to display after the user's input
+const suggestedText = computed(() => {
+  // if (suggestion.value && suggestion.value.startsWith(userInput.value)) {
+  // return suggestion.value.substring(userInput.value.length);
+  // }
+  // return '';
+  return suggestion.value;
+});
+
+// Function to accept the suggestion when Tab is pressed
+function acceptSuggestion() {
+  if (suggestedText.value) {
+    userInput.value += suggestion.value;
+    suggestion.value = '';
+    // Move the cursor to the end of the input
+    // nextTick(() => {
+    //   inputRef.value.focus();
+    // });
+  }
+}
+
+onMounted(() => {
+  const query = route.query;
+  mode.value = query.mode as string;
+});
 </script>
 
 <style lang="scss" scoped>
@@ -95,6 +187,9 @@ const chats = computed(() => {
   padding-top: 20px;
   padding-left: 5%;
   padding-right: 5%;
+
+  background-color: #696969;
+  height: 100vh;
 
   .chat {
     margin-bottom: 20px;
@@ -105,8 +200,8 @@ const chats = computed(() => {
   position: absolute;
   top: 0;
   padding-top: 50px;
-  padding-left: calc(10% + 190px);
-  padding-right: calc(10% + 190px);
+  padding-left: 10%;
+  padding-right: 10%;
   font-size: 20px;
   padding-bottom: 100px;
 
@@ -136,7 +231,7 @@ const chats = computed(() => {
   margin-left: 20px;
 }
 .user-input {
-  width: calc(75% - 380px);
+  width: 75%;
   margin-left: auto;
   margin-right: auto;
   background-color: #fff;
@@ -148,16 +243,12 @@ const chats = computed(() => {
   }
 }
 
-.drawer-btn-container,
-.drawer-btn-container-open {
+.drawer-btn-container {
   position: absolute;
   right: 0px;
   height: 100vh;
   width: min-content;
   z-index: 2;
-}
-.drawer-btn-container-open {
-  right: 350px;
 }
 
 .drawer-btn {

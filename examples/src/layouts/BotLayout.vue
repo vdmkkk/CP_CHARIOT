@@ -1,5 +1,5 @@
 <template>
-  <q-layout view="lHh Lpr lFf">
+  <q-layout view="lHh Lpr lFf" class="no-scroll overflow-hidden">
     <q-header elevated style="background-color: #ddd">
       <q-toolbar>
         <q-btn
@@ -40,20 +40,8 @@
         </q-item>
       </q-list>
     </q-drawer>
-    <iframe
-      src="http://localhost:9000/#/small"
-      frameborder="0"
-      style="
-        z-index: 999;
-        position: fixed;
-        bottom: 0px;
-        right: 0px;
-        width: 100vw;
-        height: 100vh;
-        pointer-events: auto;
-      "
-    ></iframe>
-    <q-page-container>
+
+    <q-page-container class="no-scroll overflow-hidden">
       <router-view />
     </q-page-container>
   </q-layout>
@@ -61,7 +49,13 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { EssentialLinkProps } from 'components/EssentialLink.vue';
+import EssentialLink, {
+  EssentialLinkProps,
+} from 'components/EssentialLink.vue';
+
+defineOptions({
+  name: 'MainLayout',
+});
 
 const linksList: EssentialLinkProps[] = [
   {

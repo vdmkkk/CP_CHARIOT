@@ -2,7 +2,7 @@
   <q-page ref="pageRef" style="width: 100%" class="full-height no-scroll">
     <iframe
       class="fullscreen-frame no-scroll"
-      src="http://localhost:9000"
+      src="http://localhost:9000?mode=fullscreen"
       :style="{ height: pageHeight }"
       frameborder="0"
     ></iframe>
@@ -18,13 +18,12 @@ onMounted(() => {
   pageHeight.value = pageContainerRef.value?.$el.parentElement.style.minHeight;
 
   const target = document.querySelector('body')?.style;
-  target.overflowY = 'hidden';
+  target!.overflowY = 'hidden';
 });
 </script>
 
 <style lang="scss" scoped>
 .fullscreen-frame {
   width: 100%;
-  height: 819px;
 }
 </style>
