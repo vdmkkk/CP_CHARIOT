@@ -41,7 +41,7 @@
       </q-list>
     </q-drawer>
     <iframe
-      src="http://localhost:9000/#/small"
+      :src="`${processEnv?.env.VUE_APP_API_URL}/#/small?documentId=1`"
       frameborder="0"
       style="
         z-index: 999;
@@ -60,8 +60,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { EssentialLinkProps } from 'components/EssentialLink.vue';
+
+const processEnv = computed(() => {
+  return process;
+});
 
 const linksList: EssentialLinkProps[] = [
   {

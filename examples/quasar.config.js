@@ -11,6 +11,8 @@
 
 const { configure } = require('quasar/wrappers');
 const path = require('path');
+const { config } = require('dotenv');
+const { parsed } = config();
 
 module.exports = configure(function (/* ctx */) {
   return {
@@ -49,6 +51,9 @@ module.exports = configure(function (/* ctx */) {
       target: {
         browser: ['es2019', 'edge88', 'firefox78', 'chrome87', 'safari13.1'],
         node: 'node20'
+      },
+      env: {
+        ...parsed
       },
 
       vueRouterMode: 'history', // available values: 'hash', 'history'

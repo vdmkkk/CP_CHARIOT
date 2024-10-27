@@ -7,17 +7,68 @@
       :width="350"
       :breakpoint="700"
       class="text-white"
+      style="background-color: #696969"
     >
       <q-virtual-scroll
-        v-slot="{ item: chat }"
-        :items="chats"
+        v-if="!loadingChats"
+        :items="chats.toReversed()"
         class="chats-container"
         style="max-height: 100vh"
       >
-        <div class="chat ellipsis-2-lines">
-          {{ chat.name }}
-        </div>
+        <template v-slot:before
+          ><div
+            class="create-chat"
+            style="
+              border-radius: 14px;
+              display: flex;
+              flex-direction: row;
+              margin-bottom: 20px;
+            "
+            @click="messages.length == 0 ? () => {} : newChat"
+          >
+            <p
+              style="
+                height: 47px;
+                width: 28px;
+                margin: 0;
+                font-size: 25px;
+                line-height: 47px;
+                margin-left: 15px;
+                font-weight: 600;
+              "
+            >
+              +
+            </p>
+            <p
+              style="
+                margin: 0;
+                padding-top: 10px;
+                padding-bottom: 10px;
+                font-size: 18px;
+                text-align: center;
+              "
+            >
+              Новый чат
+            </p>
+          </div></template
+        >
+        <template v-slot="{ item: chat }">
+          <div
+            class="chat ellipsis-2-lines q-pa-md"
+            @click="
+              selectedChat = chat.id;
+              messages = [];
+              userInput = '';
+              getChatHistory();
+            "
+          >
+            {{ chat.last_message.split('\n')[0].replace('Вопрос: ', '') }}
+          </div>
+        </template>
       </q-virtual-scroll>
+      <q-inner-loading :showing="loadingChats">
+        <q-spinner-gears size="50px" style="color: #e00000" />
+      </q-inner-loading>
     </q-drawer>
     <q-page-container>
       <q-page class="row items-center justify-evenly">
@@ -31,17 +82,34 @@
             @click="showChats = !showChats"
           />
         </div>
-        <q-virtual-scroll
-          v-slot="{ item: message }"
-          :items="messages"
-          class="message-container"
-          style="max-height: 100vh"
-        >
-          <div :class="message.from == 'user' ? 'message-user' : 'message-bot'">
-            <h1 v-if="message.from == 'bot'">Ответ SILA.Bot:</h1>
-            {{ message.message }}
+        <div v-if="!loadingResponse">
+          <q-virtual-scroll
+            v-if="messages.length != 0"
+            v-slot="{ item: message }"
+            :items="messages"
+            class="message-container"
+            style="max-height: 100vh"
+          >
+            <div
+              :class="message.from == 'user' ? 'message-user' : 'message-bot'"
+            >
+              <h1 v-if="message.from == 'bot'">Ответ SILA.Bot:</h1>
+              {{ message.text }}
+            </div>
+          </q-virtual-scroll>
+          <div v-else>
+            <p style="text-align: center; font-size: 30px; font-weight: 600">
+              Новый чат
+            </p>
+            <p style="text-align: center; font-size: 16px; font-weight: 100">
+              Задайте интересующий Вас вопрос
+            </p>
           </div>
-        </q-virtual-scroll>
+        </div>
+        <q-inner-loading :showing="loadingChats" v-else>
+          <q-spinner-gears size="50px" style="color: #e00000" />
+        </q-inner-loading>
+
         <q-input
           v-model="userInput"
           class="user-input absolute-bottom q-mb-lg"
@@ -51,6 +119,7 @@
           autogrow
           ref="inputRef"
           @keydown.tab.prevent="acceptSuggestion"
+          @keydown.enter.prevent="sendMessage"
           @update:model-value="onInput"
         >
           <template v-slot:append>
@@ -58,7 +127,7 @@
               {{ suggestedText }}
             </span>
             <!-- <q-btn round flat class="btn" icon="attach_file" /> -->
-            <q-btn round flat class="btn" icon="send" />
+            <q-btn round flat class="btn" icon="send" @click="sendMessage" />
           </template>
         </q-input>
       </q-page>
@@ -68,74 +137,113 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import messageData from '../assets/messages.json';
-import chatsData from '../assets/chats.json';
-import { useRoute } from 'vue-router';
 
-import { debounce } from 'lodash'; // Use lodash-es or any debounce utility
-import { useQuasar } from 'quasar';
+import { debounce } from 'lodash';
+import { api } from 'src/boot/axios';
 
-const route = useRoute();
+const documentId = ref();
 
 const showChats = ref(true);
 const userInput = ref('');
 
-const messages = computed(() => {
-  return messageData;
-});
+const messages = ref([]);
 
-const chats = computed(() => {
-  return chatsData;
-});
+const chats = ref([]);
+const selectedChat = ref(-1);
+const loadingResponse = ref(false);
+const loadingChats = ref(false);
 
-const mode = ref('');
+const sendMessage = async () => {
+  messages.value.push({ text: userInput.value, from: 'user' });
+  if (selectedChat.value == -1) {
+    await newChat();
+  }
+  api
+    .post('/get_answer', {
+      query: userInput.value,
+      chat_id: selectedChat.value,
+      user_id: '1',
+    })
+    .then((res) => {
+      messages.value.push({ text: res.data.answer, from: 'bot' });
+      userInput.value = '';
+    });
+};
+
+const getChatHistory = () => {
+  let meow;
+};
+
+const newChat = async () => {
+  await api
+    .post('/create_chat', {
+      user_id: '1',
+      document_id: documentId.value.toString(),
+    })
+    .then((res) => {
+      console.log(res.data);
+      selectedChat.value = res.data['chat_id'];
+      chats.value.push({
+        chat_id: res.data['chat_id'],
+        last_message: 'Новый чат',
+      });
+      // getChats();
+    })
+    .catch((e) => {
+      console.error(e);
+    });
+};
+
+const getChats = () => {
+  loadingChats.value = true;
+  api
+    .get('/get_chats')
+    .then((res) => {
+      chats.value = res.data;
+      loadingChats.value = false;
+    })
+    .catch((e) => {
+      console.error(e);
+    });
+};
 
 const inputRef = ref(null);
 
-// Reactive data properties
-const debounceduserInput = ref(''); // Debounced input value
-const suggestion = ref(''); // Full suggested text
-const abortController = ref(null); // For cancelling requests
+const debounceduserInput = ref('');
+const suggestion = ref('');
+const abortController = ref(null);
 
-// Debounce the input to prevent multiple rapid API calls
 const debouncedUpdateuserInput = debounce(() => {
   debounceduserInput.value = userInput.value;
   console.log(debounceduserInput.value);
-}, 500); // Adjust the debounce delay as needed (e.g., 500ms)
+});
 
 function onInput() {
   console.log('allo');
   debouncedUpdateuserInput();
 }
 
-// Watch the debounced input value to fetch suggestions
 watch(debounceduserInput, async (newValue) => {
   if (abortController.value) {
-    // Cancel previous request
     abortController.value.abort();
   }
 
-  // Create a new AbortController for the current request
   abortController.value = new AbortController();
   const signal = abortController.value.signal;
 
   try {
-    // Fetch suggestion from the backend
     const result = await getSuggestion(newValue, signal);
     suggestion.value = result;
   } catch (error) {
     if (error.name === 'AbortError') {
-      // Request was aborted, do nothing
       console.log('Previous request was cancelled.');
     } else {
-      // Handle other errors
       console.error('Error fetching suggestion:', error);
     }
     suggestion.value = '';
   }
 });
 
-// Function to fetch suggestion from the backend
 async function getSuggestion(inputText, signal) {
   // Replace this with your actual API endpoint and request
   // Example using fetch with AbortController support
@@ -155,7 +263,6 @@ async function getSuggestion(inputText, signal) {
   return 'aboba';
 }
 
-// Compute the suggested text to display after the user's input
 const suggestedText = computed(() => {
   // if (suggestion.value && suggestion.value.startsWith(userInput.value)) {
   // return suggestion.value.substring(userInput.value.length);
@@ -164,21 +271,23 @@ const suggestedText = computed(() => {
   return suggestion.value;
 });
 
-// Function to accept the suggestion when Tab is pressed
 function acceptSuggestion() {
   if (suggestedText.value) {
     userInput.value += suggestion.value;
     suggestion.value = '';
-    // Move the cursor to the end of the input
-    // nextTick(() => {
-    //   inputRef.value.focus();
-    // });
   }
 }
 
 onMounted(() => {
-  const query = route.query;
-  mode.value = query.mode as string;
+  const searchParams = new URLSearchParams(window.location.search);
+
+  // Iterate over the search parameters and store them in the reactive object
+  searchParams.forEach((value, key) => {
+    if (key == 'documentId') {
+      documentId.value = value;
+    }
+  });
+  getChats();
 });
 </script>
 
@@ -191,14 +300,35 @@ onMounted(() => {
   background-color: #696969;
   height: 100vh;
 
+  .create-chat {
+    background-color: #575757;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .create-chat:hover {
+    background-color: #494949;
+  }
+
   .chat {
-    margin-bottom: 20px;
+    height: 72px;
+    cursor: pointer;
+    white-space: wrap;
+    overflow: hidden;
+    font-size: 18px;
+    line-height: 24px;
+    user-select: none;
+  }
+
+  .chat:hover {
+    background-color: #614e4e;
   }
 }
 
 .message-container {
   position: absolute;
   top: 0;
+  left: 0;
   padding-top: 50px;
   padding-left: 10%;
   padding-right: 10%;
