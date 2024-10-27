@@ -11,7 +11,7 @@
     >
       <q-virtual-scroll
         v-if="!loadingChats"
-        :items="chats.toReversed()"
+        :items="chats"
         class="chats-container"
         style="max-height: 100vh"
       >
@@ -24,7 +24,7 @@
               flex-direction: row;
               margin-bottom: 20px;
             "
-            @click="messages.length == 0 ? () => {} : newChat"
+            @click.stop="messages.length == 0 ? () => {} : newChat()"
           >
             <p
               style="
@@ -56,10 +56,12 @@
           <div
             class="chat ellipsis-2-lines q-pa-md"
             @click="
-              selectedChat = chat.id;
-              messages = [];
-              userInput = '';
-              getChatHistory();
+              () => {
+                selectedChat = chat.chat_id;
+                messages = [];
+                userInput = '';
+                getChatHistory();
+              }
             "
           >
             {{ chat.last_message.split('\n')[0].replace('Вопрос: ', '') }}
@@ -82,7 +84,7 @@
             @click="showChats = !showChats"
           />
         </div>
-        <div v-if="!loadingResponse">
+        <div>
           <q-virtual-scroll
             v-if="messages.length != 0"
             v-slot="{ item: message }"
@@ -106,7 +108,7 @@
             </p>
           </div>
         </div>
-        <q-inner-loading :showing="loadingChats" v-else>
+        <q-inner-loading :showing="loadingResponse">
           <q-spinner-gears size="50px" style="color: #e00000" />
         </q-inner-loading>
 
@@ -156,6 +158,7 @@ const loadingChats = ref(false);
 
 const sendMessage = async () => {
   messages.value.push({ text: userInput.value, from: 'user' });
+  loadingResponse.value = true;
   if (selectedChat.value == -1) {
     await newChat();
   }
@@ -166,13 +169,38 @@ const sendMessage = async () => {
       user_id: '1',
     })
     .then((res) => {
+      loadingResponse.value = false;
       messages.value.push({ text: res.data.answer, from: 'bot' });
       userInput.value = '';
     });
 };
 
-const getChatHistory = () => {
-  let meow;
+const getChatHistory = async () => {
+  console.log(selectedChat.value);
+  await api
+    .post('/get_messages_by_chat_id', { chat_id: selectedChat.value })
+    .then((res) => {
+      console.log(res.data);
+      messages.value = res.data
+        .toReversed()
+        .map(({ message }) => {
+          if (message.includes('Чат создан')) {
+            return [{ from: 'user', text: message }];
+          } else {
+            const arr = message.split('\nОтвет: ');
+            const que = arr[0].replace('Вопрос: ', '');
+            const ans = arr[1];
+            return [
+              { from: 'user', text: que },
+              { from: 'bot', text: ans },
+            ];
+          }
+        })
+        .flat(1);
+    })
+    .catch((e) => {
+      console.error(e);
+    });
 };
 
 const newChat = async () => {
@@ -184,10 +212,14 @@ const newChat = async () => {
     .then((res) => {
       console.log(res.data);
       selectedChat.value = res.data['chat_id'];
-      chats.value.push({
-        chat_id: res.data['chat_id'],
-        last_message: 'Новый чат',
-      });
+      chats.value = [
+        {
+          chat_id: res.data['chat_id'],
+          last_message: 'Новый чат',
+        },
+        ...chats.value,
+      ];
+      getChatHistory();
       // getChats();
     })
     .catch((e) => {
@@ -246,29 +278,11 @@ watch(debounceduserInput, async (newValue) => {
 });
 
 async function getSuggestion(inputText, signal) {
-  // Replace this with your actual API endpoint and request
-  // Example using fetch with AbortController support
-  // const response = await fetch('/api/suggestion', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({ text: inputText }),
-  //   signal: signal, // Pass the signal to support cancellation
-  // });
-
-  // if (!response.ok) {
-  //   throw new Error('Network response was not ok');
-  // }
-
-  // const data = await response.json();
-  // return data.suggestion; // Adjust based on your API response structure
-  return 'aboba';
+  // to be finished
+  return '';
 }
 
 const suggestedText = computed(() => {
-  // if (suggestion.value && suggestion.value.startsWith(userInput.value)) {
-  // return suggestion.value.substring(userInput.value.length);
-  // }
-  // return '';
   return suggestion.value;
 });
 
@@ -282,7 +296,6 @@ function acceptSuggestion() {
 onMounted(() => {
   const searchParams = new URLSearchParams(window.location.search);
 
-  // Iterate over the search parameters and store them in the reactive object
   searchParams.forEach((value, key) => {
     if (key == 'documentId') {
       documentId.value = value;
@@ -342,7 +355,8 @@ onMounted(() => {
   }
 
   .message-user {
-    font-weight: 300;
+    font-weight: 100;
+    letter-spacing: 1px;
   }
 
   .message-bot {
@@ -350,7 +364,7 @@ onMounted(() => {
       font-size: 24px;
       line-height: 36px;
     }
-    font-weight: 400;
+    font-weight: 600;
     p {
       margin: 0;
     }

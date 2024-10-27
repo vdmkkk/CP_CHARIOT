@@ -37,6 +37,7 @@
           dense
           icon="content_copy"
           color="5C5C5C"
+          @click="clipboardText(item['link_small'])"
         />
       </div>
       <p style="margin-bottom: 10px">Модальное окно:</p>
@@ -49,13 +50,14 @@
           dense
           icon="content_copy"
           color="5C5C5C"
+          @click="clipboardText(item['link_big'])"
         />
       </div>
       <div
         v-if="item['document_id'] == -1"
         style="
-          background-color: #e00000;
-          color: #fff;
+          border: 1px solid #e00000;
+          color: #000;
           border-radius: 20px;
           cursor: pointer;
         "
@@ -69,7 +71,8 @@
             font-weight: 600;
           "
         >
-          Добавить документ
+          Документ загружен
+          <q-icon name="check" />
         </p>
       </div>
     </div>
@@ -94,8 +97,26 @@
 // @ts-nocheck
 import { api } from 'src/boot/axios';
 import { onMounted, ref } from 'vue';
+import { copyToClipboard } from 'quasar';
+import { Notify } from 'quasar';
 
 const containers = ref([]);
+
+const clipboardText = (text: string) => {
+  copyToClipboard(text)
+    .then(() => {
+      Notify.create({
+        type: 'positive',
+        message: 'Код успешно скопирован',
+      });
+    })
+    .catch(() => {
+      Notify.create({
+        type: 'negative',
+        message: 'Ошибка при копировании кода',
+      });
+    });
+};
 
 const handleGet = () => {
   api

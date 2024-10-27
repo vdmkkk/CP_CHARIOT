@@ -45,6 +45,13 @@
                 flex-direction: row;
                 margin-bottom: 20px;
               "
+              @click="
+                () => {
+                  showChats = false;
+                  messages = [];
+                  newChat();
+                }
+              "
             >
               <p
                 style="
@@ -73,8 +80,19 @@
             </div></template
           >
           <template v-slot="{ item: chat }">
-            <div class="chat ellipsis-2-lines">
-              {{ chat.name }}
+            <div
+              class="chat ellipsis-2-lines q-pa-md"
+              @click="
+                () => {
+                  showChats = false;
+                  selectedChat = chat.chat_id;
+                  messages = [];
+                  userInput = '';
+                  getChatHistory();
+                }
+              "
+            >
+              {{ chat.last_message.split('\n')[0].replace('Вопрос: ', '') }}
             </div>
           </template>
         </q-virtual-scroll>
@@ -101,9 +119,9 @@
               @click="showChats = !showChats"
             />
           </div>
-          <div v-if="!loadingResponse">
+          <div>
             <q-virtual-scroll
-              v-if="selectedChat != -1"
+              v-if="messages.length != 0"
               v-slot="{ item: message }"
               :items="messages"
               class="message-container"
@@ -113,7 +131,7 @@
                 :class="message.from == 'user' ? 'message-user' : 'message-bot'"
               >
                 <h1 v-if="message.from == 'bot'">Ответ SILA.Bot:</h1>
-                {{ message.message }}
+                {{ message.text }}
               </div>
             </q-virtual-scroll>
             <div v-else>
@@ -125,9 +143,9 @@
               </p>
             </div>
           </div>
-          <div v-else>
-            <q-inner-loading />
-          </div>
+          <q-inner-loading :showing="loadingResponse">
+            <q-spinner-gears size="50px" style="color: #e00000" />
+          </q-inner-loading>
 
           <q-input
             v-model="userInput"
@@ -136,6 +154,9 @@
             outlined
             rounded
             autogrow
+            @keydown.tab.prevent="acceptSuggestion"
+            @keydown.enter.prevent="sendMessage"
+            @update:model-value="onInput"
           >
             <template v-slot:append>
               <!-- <q-btn round flat class="btn" icon="attach_file" /> -->
@@ -166,6 +187,8 @@ watch(isExpanded, () => {
   console.log(target);
 });
 
+const documentId = ref();
+
 const showChats = ref(true);
 const userInput = ref('');
 
@@ -174,19 +197,90 @@ const messages = ref([]);
 const chats = ref([]);
 const selectedChat = ref(-1);
 const loadingResponse = ref(false);
+const loadingChats = ref(false);
 
-const getChats = () => {
+const sendMessage = async () => {
+  messages.value.push({ text: userInput.value, from: 'user' });
+  loadingResponse.value = true;
+  if (selectedChat.value == -1) {
+    await newChat();
+  }
   api
-    .get('/get_chats')
+    .post('/get_answer', {
+      query: userInput.value,
+      chat_id: selectedChat.value,
+      user_id: '1',
+    })
     .then((res) => {
-      chats.value = res.data;
+      loadingResponse.value = false;
+      messages.value.push({ text: res.data.answer, from: 'bot' });
+      userInput.value = '';
+    });
+};
+
+const getChatHistory = async () => {
+  console.log(selectedChat.value);
+  await api
+    .post('/get_messages_by_chat_id', { chat_id: selectedChat.value })
+    .then((res) => {
+      console.log(res.data);
+      messages.value = res.data
+        .toReversed()
+        .map(({ message }) => {
+          if (message.includes('Чат создан')) {
+            return [{ from: 'user', text: message }];
+          } else {
+            const arr = message.split('\nОтвет: ');
+            const que = arr[0].replace('Вопрос: ', '');
+            const ans = arr[1];
+            return [
+              { from: 'user', text: que },
+              { from: 'bot', text: ans },
+            ];
+          }
+        })
+        .flat(1);
     })
     .catch((e) => {
       console.error(e);
     });
 };
 
-const mode = ref('');
+const newChat = async () => {
+  await api
+    .post('/create_chat', {
+      user_id: '1',
+      document_id: documentId.value?.toString(),
+    })
+    .then((res) => {
+      console.log(res.data);
+      selectedChat.value = res.data['chat_id'];
+      chats.value = [
+        {
+          chat_id: res.data['chat_id'],
+          last_message: 'Новый чат',
+        },
+      ].concat(chats.value);
+      getChatHistory();
+      // getChats();
+    })
+    .catch((e) => {
+      console.error(e);
+    });
+};
+
+const getChats = () => {
+  loadingChats.value = true;
+  api
+    .get('/get_chats')
+    .then((res) => {
+      chats.value = res.data;
+      loadingChats.value = false;
+    })
+    .catch((e) => {
+      console.error(e);
+    });
+};
 
 const inputRef = ref(null);
 
@@ -226,29 +320,11 @@ watch(debounceduserInput, async (newValue) => {
 });
 
 async function getSuggestion(inputText, signal) {
-  // Replace this with your actual API endpoint and request
-  // Example using fetch with AbortController support
-  // const response = await fetch('/api/suggestion', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({ text: inputText }),
-  //   signal: signal, // Pass the signal to support cancellation
-  // });
-
-  // if (!response.ok) {
-  //   throw new Error('Network response was not ok');
-  // }
-
-  // const data = await response.json();
-  // return data.suggestion; // Adjust based on your API response structure
-  return 'aboba';
+  // to be finished
+  return '';
 }
 
 const suggestedText = computed(() => {
-  // if (suggestion.value && suggestion.value.startsWith(userInput.value)) {
-  // return suggestion.value.substring(userInput.value.length);
-  // }
-  // return '';
   return suggestion.value;
 });
 
@@ -260,6 +336,14 @@ function acceptSuggestion() {
 }
 
 onMounted(() => {
+  const searchParams = new URLSearchParams(window.location.search);
+
+  searchParams.forEach((value, key) => {
+    if (key == 'documentId') {
+      documentId.value = value;
+    }
+  });
+  documentId.value = 1;
   getChats();
 });
 </script>
@@ -321,6 +405,9 @@ onMounted(() => {
     margin-bottom: 16px;
     font-size: 14px;
     font-weight: 600;
+    border-radius: 10px;
+    line-height: 18px;
+    height: 56px;
   }
 
   .chat:hover {
@@ -331,6 +418,7 @@ onMounted(() => {
 .message-container {
   position: absolute;
   top: 0;
+  left: 0;
   padding-top: 50px;
   padding-left: 10%;
   padding-right: 10%;
@@ -344,15 +432,17 @@ onMounted(() => {
   }
 
   .message-user {
-    font-weight: 300;
+    font-weight: 100;
+    letter-spacing: 1px;
   }
 
   .message-bot {
     h1 {
       font-size: 20px;
       line-height: 36px;
+      font-weight: 400;
     }
-    font-weight: 400;
+    font-weight: 600;
     p {
       margin: 0;
     }
