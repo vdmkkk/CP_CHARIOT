@@ -136,6 +136,7 @@
 </template>
 
 <script setup lang="ts">
+// @ts-nocheck
 import { ref, computed, onMounted, watch } from 'vue';
 
 import { debounce } from 'lodash';

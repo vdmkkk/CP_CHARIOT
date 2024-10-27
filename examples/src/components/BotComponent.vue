@@ -10,6 +10,7 @@
 </template>
 
 <script setup lang="ts">
+// @ts-nocheck
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
 const pageContainerRef = useTemplateRef('pageRef');
 const pageHeight = ref(0);

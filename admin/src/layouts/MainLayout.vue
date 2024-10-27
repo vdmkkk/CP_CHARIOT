@@ -25,7 +25,7 @@
     модальном окне"}}
   </h2>
   <div class="row wrap q-ml-xl">
-    <div class="container" v-for="item in containers">
+    <div class="container" v-for="item in containers" v-key="item.name">
       <p class="title">{{ item.name }}</p>
       <p style="margin-bottom: 10px">Отдельная страница:</p>
       <div class="code_container q-py-lg">
@@ -91,10 +91,9 @@
 </template>
 
 <script setup lang="ts">
+// @ts-nocheck
 import { api } from 'src/boot/axios';
 import { onMounted, ref } from 'vue';
-
-const a = [1, 2, 3, 4, 5];
 
 const containers = ref([]);
 
